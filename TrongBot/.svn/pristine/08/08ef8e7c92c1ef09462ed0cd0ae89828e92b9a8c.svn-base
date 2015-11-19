@@ -1,0 +1,148 @@
+package de.erni.trongbot.bot.xml;
+
+import java.util.ArrayList;
+
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
+
+import android.util.Log;
+import de.erni.trongbot.bot.entity.AIMLNode;
+
+/**
+ * 
+ * @author doa
+ *
+ * http://www.alicebot.org/documentation/aiml-reference.html
+ *
+ */
+public class AIMLHandler extends DefaultHandler {
+
+	private static final String TAG_AIML = "aiml";
+	private static final String TAG_CATEGORY = "category";
+	private static final String TAG_PATTERN = "pattern";
+	private static final String TAG_TEMPLATE = "template";
+	private static final String TAG_RANDOM = "random";
+	private static final String TAG_LIST = "li";
+	private static final String TAG_SRAI = "srai";
+	private static final String TAG_STAR = "star";
+	private AIMLNode element;
+	
+	private static final String TAG = "AIMHandler";
+	private AIMLNode root;
+		
+	public AIMLNode getAIMLTree() {
+		return root;
+	}
+
+	private StringBuilder currentText = new StringBuilder();
+	
+    public void startDocument() throws SAXException {
+    	root = new AIMLNode();
+//    	Log.d(TAG, "start document   : ");
+    }
+
+    public void endDocument() throws SAXException {
+//    	Log.d(TAG, "end document     : ");
+    }
+
+    public void startElement(String uri, String localName,
+        String qName, Attributes attributes){
+        
+        if (TAG_CATEGORY.equals(qName)){
+        	element = new AIMLNode();
+        } 
+        else if (TAG_RANDOM.equals(qName) && element != null){
+        	element.setRandom(new ArrayList<String>());
+        }
+        else if (TAG_SRAI.equals(qName) && element != null) {
+        	element.setRecursion(true);
+        }
+        else if (TAG_STAR.equals(qName) && element != null) {
+        	currentText.append("*");
+        }
+
+//    	Log.d(TAG, "start element    : " + qName);
+    }
+
+    public void endElement(String uri, String localName, String qName) throws SAXException {
+    	
+    	if(TAG_CATEGORY.equals(qName) && element != null) {
+    		String[] pattern = element.getPattern().split(" ");
+    		AIMLNode currentNode = root;
+    		for (int i = 0; i < pattern.length-1; i++){
+    			AIMLNode childNode = currentNode.getChild(pattern[i]);
+    			if (childNode == null) {
+    				childNode = new AIMLNode();
+					currentNode.addChild(pattern[i], childNode);
+				}
+    			currentNode = childNode;
+    		}
+    		
+    		// Bestehende Nodes nicht überschreiben
+    		AIMLNode matchingNode = currentNode.getChild(pattern[pattern.length-1]);
+    		
+    		
+    		if (matchingNode == null){
+    			currentNode.addChild(pattern[pattern.length-1], element);
+    		} 
+    		else {
+    			Log.d(TAG, "doppeltes Element: " + matchingNode.getPattern());  
+    			if (element.getTemplate()!=null){
+    				matchingNode.setPattern(element.getPattern());
+    			}
+    			if (element.getRandom()!=null){
+    				matchingNode.setRandom(element.getRandom());
+    			}
+    		}
+    		addNodeWithoutDeletingExistingNodes(currentNode, pattern);
+    		
+        	element=null;
+        }
+    	else if(TAG_PATTERN.equals(qName) && element != null) {
+    		String pattern = getCurrentText();
+    		pattern = pattern.replace("\n","");
+    		pattern = pattern.trim();
+    		pattern = pattern.toUpperCase();
+        	element.setPattern(pattern);
+        }
+    	else if(TAG_TEMPLATE.equals(qName) && element != null) {
+    		element.setTemplate(getCurrentText());
+    	}
+    	else if(TAG_LIST.equals(qName) && element != null && element.getRandom() != null){
+    		element.addRandomTemplate(getCurrentText());
+    	}
+    	
+//    	Log.d(TAG, "end element      : " + qName);   	
+    }
+
+    
+    private void addNodeWithoutDeletingExistingNodes(AIMLNode currentNode, String[] pattern){
+    	AIMLNode matchingNode = currentNode.getChild(pattern[pattern.length-1]);
+		
+		if (matchingNode == null){
+			currentNode.addChild(pattern[pattern.length-1], element);
+		} 
+		else {
+			Log.d(TAG, "doppeltes Element: " + matchingNode.getPattern());  
+			if (element.getTemplate()!=null){
+				matchingNode.setPattern(element.getPattern());
+			}
+			if (element.getRandom()!=null){
+				matchingNode.setRandom(element.getRandom());
+			}
+		}
+    }
+    
+    public void characters(char ch[], int start, int length)
+    throws SAXException {
+    	currentText.append(ch, start, length);
+    }
+	
+	private String getCurrentText(){
+		String text = currentText.toString();
+		currentText = new StringBuilder();
+		return text;
+	}
+    
+}

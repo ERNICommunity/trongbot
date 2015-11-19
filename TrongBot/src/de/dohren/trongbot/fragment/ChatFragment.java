@@ -1,0 +1,188 @@
+package de.dohren.trongbot.fragment;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+
+import android.app.Activity;
+import android.app.Fragment;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.speech.RecognizerIntent;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.TextToSpeech.OnInitListener;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ListView;
+import de.dohren.trongbot.adapter.ChatAdapter;
+import de.dohren.trongbot.entity.Message;
+import de.dohren.trongbot.entity.Message.MessageType;
+import de.erni.trongbot.MainActivity;
+import de.erni.trongbot.R;
+import de.erni.trongbot.bot.AIMLInterpreter;
+import de.erni.trongbot.chat.Memory;
+
+/**
+ * A placeholder fragment containing a simple view.
+ */
+public class ChatFragment extends Fragment implements OnInitListener{
+	/**
+	 * The fragment argument representing the section number for this fragment.
+	 */
+	private static final String ARG_SECTION_NUMBER = "section_number";
+	private static final int REQUEST_CODE = 1234;
+	private static final int RESULT_OK = -1;
+	private static final String TAG = "ChatFragment";
+	
+	
+	private AIMLInterpreter interpreter;
+	private EditText input;
+	private ChatAdapter adapter;
+	private Button sendButton;
+	private ListView chatList;
+	private View rootView;
+	private TextToSpeech tts;
+
+	private Memory memory;
+
+	public ChatFragment() {
+		Bundle args = new Bundle();
+		args.putInt(ARG_SECTION_NUMBER, 1);
+		setArguments(args);
+	}
+	
+	public ChatFragment(int sectionNumber) {
+		Bundle args = new Bundle();
+		args.putInt(ARG_SECTION_NUMBER, sectionNumber);
+		setArguments(args);
+	}
+
+	@Override
+	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+		rootView = inflater.inflate(R.layout.fragment_main, container, false);
+		
+		memory = Memory.getInstance();
+		interpreter =  AIMLInterpreter.getInstance(inflater.getContext());
+		
+		tts = new TextToSpeech(container.getContext(), this);
+		
+		adapter = new ChatAdapter(container.getContext(), memory.getChat());
+		chatList = (ListView) rootView.findViewById(R.id.chat_table);
+		chatList.setDivider(null);
+		chatList.setDividerHeight(0);
+		chatList.setAdapter(adapter);
+
+		input = (EditText) rootView.findViewById(R.id.message_text);
+		sendButton = (Button) rootView.findViewById(R.id.send_button);
+
+		input.addTextChangedListener(new TextWatcher() {
+
+			@Override
+			public void onTextChanged(CharSequence s, int start, int before, int count) {
+			}
+
+			@Override
+			public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+			}
+
+			@Override
+			public void afterTextChanged(Editable s) {
+				String text = input.getText().toString();
+				if (text.length() == 0) {
+					sendButton.setBackgroundResource(R.drawable.ic_button_microphone);
+				} else {
+					sendButton.setBackgroundResource(R.drawable.ic_button_text);
+				}
+			}
+
+		});
+
+		sendButton.setOnClickListener(new OnClickListener() {
+
+			@Override
+			public void onClick(View v) {
+				String messageText = input.getText().toString();
+				if ("".equals(messageText)) {
+					startVoiceRecognitionActivity();
+					
+				}
+				else {
+					addMessage(messageText);
+				}
+			}
+		});
+
+		return rootView;
+	}
+
+    private void startVoiceRecognitionActivity()
+    {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Voice recognition Demo...");
+        startActivityForResult(intent, REQUEST_CODE);
+    }
+ 
+    private void addMessage(String text){
+    	Message message = new Message();
+		message.text = text;
+		message.type = MessageType.SELF;
+		memory.addMessage(message);
+		
+		input.setText("");
+
+		Message answer = new Message();
+		answer.text = interpreter.match(text);
+		answer.type = MessageType.OTHER;
+		memory.addMessage(answer);
+		input.onEditorAction(EditorInfo.IME_ACTION_DONE);
+	
+		adapter.notifyDataSetChanged();
+		chatList.setSelection(adapter.getCount() - 1); 
+		
+		HashMap<String, String> map = new HashMap<>();
+	    map.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "MessageId");
+		tts.speak(answer.text, TextToSpeech.QUEUE_FLUSH, map);
+    }
+    
+    /**
+     * Handle the results from the voice recognition activity.
+     */
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data)
+    {
+        if (requestCode == REQUEST_CODE && resultCode == RESULT_OK)
+        {
+            // Populate the wordsList with the String values the recognition engine thought it heard
+            ArrayList<String> matches = data.getStringArrayListExtra(
+                    RecognizerIntent.EXTRA_RESULTS);
+            Log.d(TAG, "####################" + matches.get(0));
+            addMessage(matches.get(0));
+            
+            
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+	
+	
+	@Override
+	public void onAttach(Activity activity) {
+		super.onAttach(activity);
+		((MainActivity) activity).onSectionAttached(getArguments().getInt(ARG_SECTION_NUMBER));
+	}
+
+	@Override
+	public void onInit(int status) {
+		// TODO Auto-generated method stub
+		
+	}
+}

@@ -1,0 +1,140 @@
+package de.erni.trongbot.bot;
+
+import java.io.InputStream;
+import java.util.List;
+
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+
+import android.content.Context;
+import de.erni.trongbot.bot.entity.AIMLNode;
+import de.erni.trongbot.bot.xml.AIMLHandler;
+
+public class AIMLInterpreter {
+	
+	private Context context;
+	private static AIMLNode aimlMemory;
+	private static final String EMPTY_STAR = "";
+	
+	public AIMLInterpreter(Context context){
+		this.context = context;
+		if (aimlMemory == null) {
+			parse();
+		}
+	}
+	
+	
+	private void parse(){
+		AIMLHandler handler   = new AIMLHandler();
+		SAXParserFactory factory = SAXParserFactory.newInstance();
+		try {
+			
+		    InputStream    xmlInput  = context.getAssets().open("German-standalone.aiml");
+		    SAXParser      saxParser = factory.newSAXParser();
+ 
+		    saxParser.parse(xmlInput, handler);
+
+		} catch (Throwable err) {
+		    err.printStackTrace ();
+		}
+			
+		aimlMemory = handler.getAIMLTree();
+	}
+	
+	
+	/**
+	 * Core Method to find the fitting pattern
+	 * 
+	 * @param query
+	 * @return
+	 */
+	public String match(String pattern){
+		String query = preparePattern(pattern);
+		
+		AIMLNode currentNode = aimlMemory;
+		AIMLNode match = null;
+		
+		String[] words = query.split(" ");
+		for (int i = 0; i < words.length; i++){
+			// den letzten Stern am Anfang merken
+			
+			AIMLNode potenticalMatch = currentNode.getChild("*");
+			
+			if (potenticalMatch != null){
+				if (getAnswer(potenticalMatch, EMPTY_STAR) != null){
+					match = currentNode.getChild("*");
+				}
+				for (int t = i; t < words.length; t++) {
+					
+					if (potenticalMatch.getChild(words[t]) == null) {
+						continue;
+					}
+					potenticalMatch = potenticalMatch.getChild(words[t]);
+					
+					if (t == words.length-1 && potenticalMatch.hasPattern()){
+						match = potenticalMatch;
+					}
+				}	
+			}
+			
+			currentNode = currentNode.getChild(words[i]);
+				
+			if (currentNode == null) {
+				break;
+			}
+			
+			if (i == words.length-1 && currentNode.hasPattern()){
+				match = currentNode;
+			}
+		}
+		
+		String star = getStar(match.getPattern(), pattern);
+		
+		if (match.isRecursion()) {
+			return match(getAnswer(match, star));
+		}
+		
+		return getAnswer(match, star);
+	}
+	
+	
+	private String getStar(String pattern, String query) {
+
+		int start = pattern.indexOf("*");
+		int end = query.length()-pattern.length()+start+1;
+		if (start > 0){
+			return query.subSequence(start, end).toString();
+		}
+		
+		return "";
+
+	}
+	
+	
+	private String getAnswer(AIMLNode node, String star){
+		String answer = null;
+		if (node.getRandom() != null && node.getRandom().size() != 0) {
+			List<String> templates = node.getRandom();
+			int index = (int)(Math.random() * templates.size());
+			answer =  templates.get(index);
+		}
+		else {
+			answer = node.getTemplate();
+		}
+		
+		if (answer!=null){
+			answer = answer.replace("*", star);
+		}
+		
+		return answer;
+	}
+	
+	
+	private String preparePattern(String pattern){
+		pattern = pattern.trim();
+		pattern = pattern.toUpperCase();
+		return pattern;
+	}
+	
+	
+}

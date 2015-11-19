@@ -1,0 +1,154 @@
+package de.dohren.trongbot.fragment;
+
+import java.util.ArrayList;
+
+import android.app.Activity;
+import android.app.Fragment;
+import android.content.Intent;
+import android.os.Bundle;
+import android.speech.RecognizerIntent;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ListView;
+import de.dohren.trongbot.adapter.ChatAdapter;
+import de.dohren.trongbot.entity.Message;
+import de.dohren.trongbot.entity.Message.MessageType;
+import de.erni.trongbot.MainActivity;
+import de.erni.trongbot.R;
+import de.erni.trongbot.bot.AIMLInterpreter;
+
+/**
+ * A placeholder fragment containing a simple view.
+ */
+public class ChatFragment extends Fragment {
+	/**
+	 * The fragment argument representing the section number for this fragment.
+	 */
+	private static final String ARG_SECTION_NUMBER = "section_number";
+	private static final int REQUEST_CODE = 1234;
+	private static final int RESULT_OK = -1;
+	
+	
+	private AIMLInterpreter interpreter;
+	private EditText input;
+	private ChatAdapter adapter;
+	private Button sendButton;
+	View rootView;
+
+	private ArrayList<Message> messages = new ArrayList<Message>();
+
+	public ChatFragment(int sectionNumber) {
+		Bundle args = new Bundle();
+		args.putInt(ARG_SECTION_NUMBER, sectionNumber);
+		setArguments(args);
+	}
+
+	@Override
+	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+		rootView = inflater.inflate(R.layout.fragment_main, container, false);
+		
+		interpreter = new AIMLInterpreter(inflater.getContext());
+		
+		adapter = new ChatAdapter(container.getContext(), messages);
+		ListView listView = (ListView) rootView.findViewById(R.id.chat_table);
+		listView.setAdapter(adapter);
+
+		input = (EditText) rootView.findViewById(R.id.message_text);
+		sendButton = (Button) rootView.findViewById(R.id.send_button);
+
+		input.addTextChangedListener(new TextWatcher() {
+
+			@Override
+			public void onTextChanged(CharSequence s, int start, int before, int count) {
+			}
+
+			@Override
+			public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+			}
+
+			@Override
+			public void afterTextChanged(Editable s) {
+				String text = input.getText().toString();
+				if (text.length() == 0) {
+					sendButton.setText("*");
+				} else {
+					sendButton.setText(">");
+				}
+			}
+
+		});
+
+		sendButton.setOnClickListener(new OnClickListener() {
+
+			@Override
+			public void onClick(View v) {
+				String messageText = input.getText().toString();
+				if ("".equals(messageText)) {
+					startVoiceRecognitionActivity();
+					
+				}
+				else {
+					Message message = new Message();
+					message.text = messageText;
+					message.type = MessageType.SELF;
+					messages.add(message);
+					
+					input.setText("");
+	
+					Message answer = new Message();
+					answer.text = interpreter.match(messageText);
+					answer.type = MessageType.OTHER;
+					messages.add(answer);
+					input.onEditorAction(EditorInfo.IME_ACTION_DONE);
+				}
+				
+				adapter.notifyDataSetChanged();
+			}
+		});
+
+		return rootView;
+	}
+
+    private void startVoiceRecognitionActivity()
+    {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Voice recognition Demo...");
+        startActivityForResult(intent, REQUEST_CODE);
+    }
+ 
+    /**
+     * Handle the results from the voice recognition activity.
+     */
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data)
+    {
+        if (requestCode == REQUEST_CODE && resultCode == RESULT_OK)
+        {
+            // Populate the wordsList with the String values the recognition engine thought it heard
+            ArrayList<String> matches = data.getStringArrayListExtra(
+                    RecognizerIntent.EXTRA_RESULTS);
+            Message message = new Message();
+            message.text = matches.get(0);
+            message.type = MessageType.OTHER;
+            messages.add(message);
+            adapter.notifyDataSetChanged();
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+	
+	
+	@Override
+	public void onAttach(Activity activity) {
+		super.onAttach(activity);
+		((MainActivity) activity).onSectionAttached(getArguments().getInt(ARG_SECTION_NUMBER));
+	}
+}
